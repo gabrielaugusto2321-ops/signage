@@ -79,20 +79,13 @@
 </head>
 <body class="player-body">
 
-  <!-- LOADING OVERLAY -->
-  <div id="loadingOverlay" style="position:fixed;inset:0;background:#080808;z-index:998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity 0.5s ease;" onclick="document.getElementById('loadingOverlay').classList.add('hidden')">
-    <div style="font-family:Syne,sans-serif;font-size:24px;font-weight:800;color:#f0f0f0;">Signage<span style="color:#444">OS</span></div>
-    <div style="font-family:DM Mono,monospace;font-size:11px;color:#444;letter-spacing:0.2em;animation:blink 1.5s ease infinite;" id="loadingMsg">CONECTANDO...</div>
-    <div style="font-family:DM Mono,monospace;font-size:9px;color:#333;margin-top:8px;">toque para continuar</div>
-  </div>
+  <!-- loading handled by tapOverlay -->
 
-  <!-- ══════════════════════════════════════════
-       TAP TO START (Safari/iOS fix)
-  ══════════════════════════════════════════ -->
-  <div id="tapOverlay" class="hidden">
-    <div class="tap-logo">Signage<em>OS</em></div>
-    <div class="tap-circle">▶</div>
-    <div class="tap-hint">Toque para iniciar</div>
+  <!-- TAP TO START — funciona em todos os browsers -->
+  <div id="tapOverlay" style="position:fixed;inset:0;background:#080808;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;cursor:pointer;">
+    <div style="font-family:Syne,sans-serif;font-size:32px;font-weight:800;color:#f0f0f0;letter-spacing:-0.02em;">Signage<span style="color:#444">OS</span></div>
+    <div style="width:100px;height:100px;border:2px solid #333;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;color:#555;">▶</div>
+    <div style="font-family:DM Mono,monospace;font-size:14px;color:#555;letter-spacing:0.2em;text-transform:uppercase;">Toque para iniciar</div>
   </div>
 
   <!-- ══════════════════════════════════════════
