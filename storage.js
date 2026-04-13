@@ -85,32 +85,41 @@ const Storage = (() => {
      INIT FIREBASE
   ═══════════════════════════════════════════ */
   async function _init() {
+    // Timeout de 8s — se Firebase não responder, usa localStorage
+    const timeout = setTimeout(() => {
+      if (!_ready) {
+        console.warn('[Storage] Firebase timeout, using localStorage fallback');
+        _initLocalFallback();
+      }
+    }, 8000);
+
     try {
-      // Importa Firebase via CDN modular
-      const { initializeApp }         = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+      const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
       const { getFirestore, doc, collection, getDoc, getDocs,
-              setDoc, deleteDoc, onSnapshot, serverTimestamp }
+              setDoc, deleteDoc, onSnapshot }
         = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
 
       const app = initializeApp(FIREBASE_CONFIG);
       _db = getFirestore(app);
 
-      // Guarda funções do Firestore para uso posterior
-      Storage._fs = { doc, collection, getDoc, getDocs, setDoc,
-                      deleteDoc, onSnapshot, serverTimestamp };
+      Storage._fs = { doc, collection, getDoc, getDocs, setDoc, deleteDoc, onSnapshot };
 
+      clearTimeout(timeout);
       _ready = true;
       console.log('[Storage] Firebase connected ✓');
 
-      // Seed inicial se necessário
+      // Update loading message
+      const msg = document.getElementById('loadingMsg');
+      if (msg) msg.textContent = 'FIREBASE OK...';
+
       await _seedIfEmpty();
 
-      // Notifica callbacks aguardando
       _onReadyCbs.forEach(cb => cb());
       _onReadyCbs = [];
 
     } catch (err) {
-      console.error('[Storage] Firebase init failed, falling back to localStorage:', err);
+      clearTimeout(timeout);
+      console.error('[Storage] Firebase error:', err);
       _initLocalFallback();
     }
   }
