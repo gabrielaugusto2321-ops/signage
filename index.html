@@ -2,151 +2,103 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <!-- VIEWPORT FIX: impede scroll horizontal no iPad/Safari -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <title>SignageOS — Player</title>
   <link rel="stylesheet" href="styles.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
   <style>
-    /* Garante que nada vaze para fora da tela */
-    html, body {
-      overflow: hidden !important;
-      max-width: 100vw !important;
-      max-height: 100vh !important;
-      position: fixed;
-      width: 100%;
-      height: 100%;
-    }
+    html, body { overflow: hidden !important; position: fixed; width: 100%; height: 100%; background: #000; }
 
-    /* TAP TO START — tela de toque para Safari/iOS */
+    /* TAP OVERLAY */
     #tapOverlay {
-      position: fixed;
-      inset: 0;
-      background: #080808;
-      z-index: 999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 24px;
-      cursor: pointer;
+      position: fixed; inset: 0; background: #080808; z-index: 999;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 24px; cursor: pointer;
     }
     #tapOverlay.hidden { display: none; }
-
-    .tap-logo {
-      font-family: 'Syne', sans-serif;
-      font-size: 28px;
-      font-weight: 800;
-      color: #f0f0f0;
-      letter-spacing: -0.02em;
-    }
-    .tap-logo em { font-style: normal; color: #555; }
-
-    .tap-hint {
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      color: #444;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      animation: blink 2s ease-in-out infinite;
-    }
-
+    .tap-logo { font-family: Syne, sans-serif; font-size: 32px; font-weight: 800; color: #f0f0f0; letter-spacing: -0.02em; }
+    .tap-logo em { font-style: normal; color: #444; }
     .tap-circle {
-      width: 80px; height: 80px;
-      border: 1px solid #222;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      color: #333;
-      animation: pulse-ring 2s ease-in-out infinite;
+      width: 90px; height: 90px; border: 1px solid #333; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; color: #555; animation: pulse-ring 2s ease-in-out infinite;
     }
+    .tap-hint { font-family: DM Mono, monospace; font-size: 13px; color: #444; letter-spacing: 0.2em; text-transform: uppercase; animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes pulse-ring { 0%,100%{transform:scale(1);border-color:#222} 50%{transform:scale(1.08);border-color:#555} }
 
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+    /* YOUTUBE — iframe direto, sem API */
+    #ytWrapper {
+      position: fixed; inset: 0; z-index: 10;
+      background: #000;
+      transition: all 600ms cubic-bezier(0.4,0,0.2,1);
     }
-
-    @keyframes pulse-ring {
-      0%, 100% { transform: scale(1); border-color: #222; }
-      50% { transform: scale(1.08); border-color: #444; }
+    #ytWrapper.pip {
+      width: 300px !important; height: 169px !important;
+      top: auto !important; left: auto !important;
+      right: 24px !important; bottom: 24px !important;
+      border-radius: 6px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.9), 0 0 0 1px #333;
+      z-index: 30; overflow: hidden;
+    }
+    #ytFrame {
+      width: 100%; height: 100%; border: none;
+      pointer-events: none;
     }
   </style>
 </head>
 <body class="player-body">
 
-  <!-- loading handled by tapOverlay -->
-
-  <!-- TAP TO START — funciona em todos os browsers -->
-  <div id="tapOverlay" style="position:fixed;inset:0;background:#080808;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;cursor:pointer;">
-    <div style="font-family:Syne,sans-serif;font-size:32px;font-weight:800;color:#f0f0f0;letter-spacing:-0.02em;">Signage<span style="color:#444">OS</span></div>
-    <div style="width:100px;height:100px;border:2px solid #333;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;color:#555;">▶</div>
-    <div style="font-family:DM Mono,monospace;font-size:14px;color:#555;letter-spacing:0.2em;text-transform:uppercase;">Toque para iniciar</div>
+  <!-- TAP TO START -->
+  <div id="tapOverlay">
+    <div class="tap-logo">Signage<em>OS</em></div>
+    <div class="tap-circle">▶</div>
+    <div class="tap-hint">Toque para iniciar</div>
   </div>
 
-  <!-- ══════════════════════════════════════════
-       STATUS BAR
-  ══════════════════════════════════════════ -->
+  <!-- STATUS BAR -->
   <div id="statusBar" class="status-bar">
     <div class="status-left">
       <span class="status-dot" id="statusDot"></span>
       <span class="status-label" id="statusLabel">AO VIVO</span>
     </div>
-    <div class="status-center">
-      <span id="clockDisplay"></span>
-    </div>
-    <div class="status-right">
-      <span id="nextAdTimer"></span>
-    </div>
+    <div class="status-center"><span id="clockDisplay"></span></div>
+    <div class="status-right"><span id="nextAdTimer"></span></div>
   </div>
 
-  <!-- ══════════════════════════════════════════
-       YOUTUBE WRAPPER
-  ══════════════════════════════════════════ -->
-  <div id="ytWrapper" class="yt-wrapper">
-    <div id="ytPlayer"></div>
-    <div id="ytOverlay" class="yt-overlay"></div>
+  <!-- YOUTUBE WRAPPER — iframe direto -->
+  <div id="ytWrapper">
+    <iframe id="ytFrame"
+      src=""
+      allow="autoplay; fullscreen; encrypted-media"
+      allowfullscreen
+      playsinline
+    ></iframe>
   </div>
 
-  <!-- ══════════════════════════════════════════
-       AD PLAYER
-  ══════════════════════════════════════════ -->
+  <!-- AD PLAYER -->
   <div id="adContainer" class="ad-container hidden">
-    <video id="adVideo" class="ad-video" playsinline webkit-playsinline muted></video>
-
+    <video id="adVideo" class="ad-video" playsinline webkit-playsinline></video>
     <div class="ad-bar">
       <div class="ad-bar-left">
         <span class="ad-tag">ANÚNCIO</span>
         <span id="adTitle" class="ad-title-text"></span>
       </div>
       <div class="ad-bar-right">
-        <div class="ad-progress-wrap">
-          <div id="adProgressBar" class="ad-progress-fill"></div>
-        </div>
+        <div class="ad-progress-wrap"><div id="adProgressBar" class="ad-progress-fill"></div></div>
         <span id="adCountdown" class="ad-countdown">0s</span>
       </div>
     </div>
-
-    <button id="skipBtn" class="skip-btn hidden" onclick="SignagePlayer.skipAd()">
-      PULAR <span>›</span>
-    </button>
+    <button id="skipBtn" class="skip-btn hidden" onclick="SignagePlayer.skipAd()">PULAR ›</button>
   </div>
 
-  <!-- ══════════════════════════════════════════
-       TRANSITION OVERLAY
-  ══════════════════════════════════════════ -->
+  <!-- TRANSITION -->
   <div id="transitionOverlay" class="transition-overlay"></div>
 
-  <!-- ══════════════════════════════════════════
-       TOAST
-  ══════════════════════════════════════════ -->
+  <!-- TOAST -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script src="storage.js"></script>
   <script src="app.js"></script>
 </body>
