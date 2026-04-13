@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignageOS — Player</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+</head>
+<body class="player-body">
+
+  <!-- ══════════════════════════════════════════
+       STATUS BAR (overlay topo)
+  ══════════════════════════════════════════ -->
+  <div id="statusBar" class="status-bar">
+    <div class="status-left">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-label" id="statusLabel">AO VIVO</span>
+    </div>
+    <div class="status-center">
+      <span id="clockDisplay"></span>
+    </div>
+    <div class="status-right">
+      <span id="nextAdTimer"></span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       YOUTUBE FULLSCREEN WRAPPER
+  ══════════════════════════════════════════ -->
+  <div id="ytWrapper" class="yt-wrapper">
+    <div id="ytPlayer"></div>
+    <!-- overlay para bloquear interação com iframe no PiP -->
+    <div id="ytOverlay" class="yt-overlay"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       AD PLAYER (fullscreen, oculto por padrão)
+  ══════════════════════════════════════════ -->
+  <div id="adContainer" class="ad-container hidden">
+    <video id="adVideo" class="ad-video" playsinline muted></video>
+
+    <!-- barra inferior do anúncio -->
+    <div class="ad-bar">
+      <div class="ad-bar-left">
+        <span class="ad-tag">ANÚNCIO</span>
+        <span id="adTitle" class="ad-title-text"></span>
+      </div>
+      <div class="ad-bar-right">
+        <div class="ad-progress-wrap">
+          <div id="adProgressBar" class="ad-progress-fill"></div>
+        </div>
+        <span id="adCountdown" class="ad-countdown">0s</span>
+      </div>
+    </div>
+
+    <!-- skip button (aparece após 5s) -->
+    <button id="skipBtn" class="skip-btn hidden" onclick="SignagePlayer.skipAd()">
+      PULAR <span>›</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       OVERLAY DE TRANSIÇÃO
+  ══════════════════════════════════════════ -->
+  <div id="transitionOverlay" class="transition-overlay"></div>
+
+  <!-- ══════════════════════════════════════════
+       TOAST NOTIFICATIONS
+  ══════════════════════════════════════════ -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ══════════════════════════════════════════
+       YOUTUBE IFRAME API
+  ══════════════════════════════════════════ -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

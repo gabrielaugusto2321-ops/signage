@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignageOS — Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+</head>
+<body class="admin-body">
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-mark">▶</span>
+      <span class="logo-text">Signage<em>OS</em></span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#section-dashboard" class="nav-item active" data-section="dashboard">
+        <span class="nav-icon">◈</span> Dashboard
+      </a>
+      <a href="#section-ads" class="nav-item" data-section="ads">
+        <span class="nav-icon">◉</span> Anúncios
+      </a>
+      <a href="#section-upload" class="nav-item" data-section="upload">
+        <span class="nav-icon">↑</span> Upload
+      </a>
+      <a href="#section-config" class="nav-item" data-section="config">
+        <span class="nav-icon">⊙</span> Configurações
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="index.html" target="_blank" class="preview-btn">
+        <span>◀▶</span> Abrir Player
+      </a>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════ -->
+  <main class="admin-main">
+
+    <!-- TOP BAR -->
+    <header class="admin-header">
+      <div class="admin-header-left">
+        <h1 id="pageTitle">Dashboard</h1>
+        <span id="pageSubtitle" class="page-subtitle">Visão geral do sistema</span>
+      </div>
+      <div class="admin-header-right">
+        <div class="header-clock" id="adminClock"></div>
+        <div class="status-pill" id="playerStatusPill">
+          <span class="pill-dot"></span> Player Ativo
+        </div>
+      </div>
+    </header>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- SECTION: DASHBOARD                      -->
+    <!-- ─────────────────────────────────────── -->
+    <section id="section-dashboard" class="admin-section active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total-ads">0</div>
+          <div class="stat-label">Anúncios Cadastrados</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-active-ads">0</div>
+          <div class="stat-label">Anúncios Ativos</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-interval">—</div>
+          <div class="stat-label">Intervalo entre Anúncios</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-yt-id">—</div>
+          <div class="stat-label">YouTube Atual</div>
+        </div>
+      </div>
+
+      <div class="dashboard-row">
+        <div class="panel">
+          <div class="panel-header">
+            <span>Fila de Anúncios</span>
+            <span class="panel-badge" id="queueBadge">0</span>
+          </div>
+          <div id="adQueueList" class="ad-queue-list">
+            <div class="empty-state">Nenhum anúncio ativo.</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span>Controle do Player</span>
+          </div>
+          <div class="player-controls">
+            <button class="ctrl-btn" onclick="AdminController.forceAd()">
+              <span>▶</span> Forçar Anúncio Agora
+            </button>
+            <button class="ctrl-btn ctrl-btn--ghost" onclick="AdminController.resetTimer()">
+              <span>↺</span> Resetar Timer
+            </button>
+          </div>
+          <div class="yt-preview-wrap">
+            <label class="field-label">YouTube ID Atual</label>
+            <div class="yt-preview-row">
+              <input type="text" id="quickYtInput" class="field-input" placeholder="ex: dQw4w9WgXcQ" />
+              <button class="apply-btn" onclick="AdminController.quickUpdateYT()">Aplicar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- SECTION: ANÚNCIOS                       -->
+    <!-- ─────────────────────────────────────── -->
+    <section id="section-ads" class="admin-section">
+      <div class="section-toolbar">
+        <input type="text" id="searchAds" class="field-input search-input" placeholder="Buscar anúncio..." oninput="AdminController.filterAds(this.value)" />
+        <button class="action-btn" onclick="AdminController.openAdModal()">
+          + Novo Anúncio
+        </button>
+      </div>
+
+      <div id="adsTableWrap" class="table-wrap">
+        <table class="ads-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Duração</th>
+              <th>Prioridade</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="adsTableBody">
+            <!-- preenchido via JS -->
+          </tbody>
+        </table>
+        <div id="adsEmptyState" class="empty-state hidden">Nenhum anúncio cadastrado ainda.</div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- SECTION: UPLOAD                         -->
+    <!-- ─────────────────────────────────────── -->
+    <section id="section-upload" class="admin-section">
+      <div class="upload-layout">
+        <div class="panel upload-panel">
+          <div class="panel-header"><span>Adicionar Novo Anúncio</span></div>
+
+          <div class="form-group">
+            <label class="field-label">Nome do Anúncio *</label>
+            <input type="text" id="adName" class="field-input" placeholder="Ex: Promo Verão 2025" />
+          </div>
+
+          <div class="form-group">
+            <label class="field-label">URL do Vídeo *</label>
+            <input type="text" id="adUrl" class="field-input" placeholder="https://... ou arquivo local" />
+            <span class="field-hint">Suporta MP4, WebM, Ogg ou URL direta</span>
+          </div>
+
+          <!-- Drag & Drop Zone -->
+          <div id="dropZone" class="drop-zone">
+            <div class="drop-icon">↑</div>
+            <div class="drop-text">Arraste um arquivo de vídeo aqui</div>
+            <div class="drop-subtext">ou clique para selecionar</div>
+            <input type="file" id="fileInput" accept="video/*" class="file-input-hidden" onchange="AdminController.handleFileSelect(event)" />
+          </div>
+
+          <div id="filePreview" class="file-preview hidden">
+            <video id="previewVideo" class="preview-video" controls></video>
+            <div class="file-info">
+              <span id="fileName" class="file-name"></span>
+              <span id="fileSize" class="file-size"></span>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label class="field-label">Duração (seg) *</label>
+              <input type="number" id="adDuration" class="field-input" placeholder="30" min="5" max="300" />
+            </div>
+            <div class="form-group half">
+              <label class="field-label">Prioridade</label>
+              <select id="adPriority" class="field-input field-select">
+                <option value="1">1 — Baixa</option>
+                <option value="2">2 — Média</option>
+                <option value="3" selected>3 — Alta</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="field-label">Tags (separadas por vírgula)</label>
+            <input type="text" id="adTags" class="field-input" placeholder="promo, verão, cliente-x" />
+          </div>
+
+          <div class="form-check-row">
+            <input type="checkbox" id="adActive" checked />
+            <label for="adActive" class="check-label">Ativar imediatamente após salvar</label>
+          </div>
+
+          <div class="form-actions">
+            <button class="action-btn full-width" onclick="AdminController.saveAd()">
+              Salvar Anúncio
+            </button>
+          </div>
+        </div>
+
+        <div class="panel upload-tips-panel">
+          <div class="panel-header"><span>Dicas e Requisitos</span></div>
+          <ul class="tips-list">
+            <li><span class="tip-icon">◈</span> Formatos suportados: MP4 (H.264), WebM</li>
+            <li><span class="tip-icon">◈</span> Resolução recomendada: 1920×1080 (Full HD)</li>
+            <li><span class="tip-icon">◈</span> Tamanho máximo: 500 MB por vídeo</li>
+            <li><span class="tip-icon">◈</span> Codecs: H.264 + AAC para máxima compatibilidade</li>
+            <li><span class="tip-icon">◈</span> Vídeos em loop funcionam melhor sem fade</li>
+            <li><span class="tip-icon">◈</span> Para Smart TVs, prefira MP4 baseline profile</li>
+          </ul>
+
+          <div class="panel-divider"></div>
+
+          <div class="panel-header"><span>Anúncios Salvos Localmente</span></div>
+          <div id="localStorageList" class="local-storage-list">
+            <!-- lista de blobs salvos -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- SECTION: CONFIGURAÇÕES                  -->
+    <!-- ─────────────────────────────────────── -->
+    <section id="section-config" class="admin-section">
+      <div class="config-layout">
+
+        <div class="panel">
+          <div class="panel-header"><span>Player — YouTube</span></div>
+          <div class="form-group">
+            <label class="field-label">YouTube Video ID</label>
+            <input type="text" id="cfgYtId" class="field-input" placeholder="dQw4w9WgXcQ" />
+            <span class="field-hint">Apenas o ID, não a URL completa</span>
+          </div>
+          <div class="form-group">
+            <label class="field-label">Iniciar em (segundos)</label>
+            <input type="number" id="cfgYtStart" class="field-input" placeholder="0" min="0" />
+          </div>
+          <div class="form-check-row">
+            <input type="checkbox" id="cfgYtMuted" />
+            <label for="cfgYtMuted" class="check-label">Iniciar sem áudio (recomendado para TVs públicas)</label>
+          </div>
+          <div class="form-check-row">
+            <input type="checkbox" id="cfgYtLoop" checked />
+            <label for="cfgYtLoop" class="check-label">Loop automático</label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><span>Agendamento de Anúncios</span></div>
+          <div class="form-group">
+            <label class="field-label">Intervalo entre anúncios (minutos)</label>
+            <input type="number" id="cfgInterval" class="field-input" placeholder="2" min="1" max="60" />
+          </div>
+          <div class="form-group">
+            <label class="field-label">Máximo de anúncios em sequência</label>
+            <input type="number" id="cfgMaxSeq" class="field-input" placeholder="1" min="1" max="10" />
+          </div>
+          <div class="form-group">
+            <label class="field-label">Modo de rotação</label>
+            <select id="cfgRotation" class="field-input field-select">
+              <option value="sequential">Sequencial</option>
+              <option value="priority">Por prioridade</option>
+              <option value="random">Aleatório</option>
+            </select>
+          </div>
+          <div class="form-check-row">
+            <input type="checkbox" id="cfgSkipBtn" checked />
+            <label for="cfgSkipBtn" class="check-label">Mostrar botão "Pular" após 5s</label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><span>Interface do Player</span></div>
+          <div class="form-group">
+            <label class="field-label">Posição do PiP</label>
+            <select id="cfgPipPos" class="field-input field-select">
+              <option value="bottom-right">Inferior Direito</option>
+              <option value="bottom-left">Inferior Esquerdo</option>
+              <option value="top-right">Superior Direito</option>
+              <option value="top-left">Superior Esquerdo</option>
+            </select>
+          </div>
+          <div class="form-check-row">
+            <input type="checkbox" id="cfgStatusBar" checked />
+            <label for="cfgStatusBar" class="check-label">Exibir barra de status</label>
+          </div>
+          <div class="form-check-row">
+            <input type="checkbox" id="cfgTransitions" checked />
+            <label for="cfgTransitions" class="check-label">Transições animadas</label>
+          </div>
+        </div>
+
+        <div class="panel config-actions-panel">
+          <div class="panel-header"><span>Ações</span></div>
+          <div class="config-btn-group">
+            <button class="action-btn" onclick="AdminController.saveConfig()">
+              Salvar Configurações
+            </button>
+            <button class="ctrl-btn ctrl-btn--ghost" onclick="AdminController.exportConfig()">
+              Exportar JSON
+            </button>
+            <button class="ctrl-btn ctrl-btn--ghost" onclick="AdminController.importConfigClick()">
+              Importar JSON
+            </button>
+            <input type="file" id="importInput" accept=".json" class="file-input-hidden" onchange="AdminController.importConfig(event)" />
+            <button class="ctrl-btn ctrl-btn--danger" onclick="AdminController.resetAll()">
+              Resetar Tudo
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════
+       MODAL: NOVO / EDITAR ANÚNCIO
+  ══════════════════════════════════════════ -->
+  <div id="adModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">Novo Anúncio</h2>
+        <button class="modal-close" onclick="AdminController.closeAdModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="field-label">Nome *</label>
+          <input type="text" id="modalAdName" class="field-input" />
+        </div>
+        <div class="form-group">
+          <label class="field-label">URL do Vídeo *</label>
+          <input type="text" id="modalAdUrl" class="field-input" placeholder="https://..." />
+        </div>
+        <div class="form-row">
+          <div class="form-group half">
+            <label class="field-label">Duração (seg)</label>
+            <input type="number" id="modalAdDuration" class="field-input" placeholder="30" />
+          </div>
+          <div class="form-group half">
+            <label class="field-label">Prioridade</label>
+            <select id="modalAdPriority" class="field-input field-select">
+              <option value="1">1 — Baixa</option>
+              <option value="2">2 — Média</option>
+              <option value="3">3 — Alta</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-check-row">
+          <input type="checkbox" id="modalAdActive" checked />
+          <label for="modalAdActive" class="check-label">Ativo</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="ctrl-btn ctrl-btn--ghost" onclick="AdminController.closeAdModal()">Cancelar</button>
+        <button class="action-btn" onclick="AdminController.saveAdFromModal()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       TOAST
+  ══════════════════════════════════════════ -->
+  <div id="adminToastContainer" class="toast-container admin-toast"></div>
+
+  <script src="storage.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
