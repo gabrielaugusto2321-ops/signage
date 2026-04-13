@@ -49,16 +49,22 @@ const SignagePlayer = (() => {
     isPlayingAd = false;
 
     startClock();
+
+    // Mostra botão IMEDIATAMENTE — não espera Firebase
     setupTapToStart();
 
-    // Aguarda Firebase estar pronto
+    // Firebase carrega em background
     Storage.onReady(async () => {
       config = await Storage.getConfig();
       applyConfig();
       buildAdQueue();
       startRealtimeListeners();
       hideLoading();
-      console.log('[SignageOS] v4 Firebase ready');
+      console.log('[SignageOS] Firebase ready');
+      // Se usuário já tocou, inicia YouTube agora
+      if (userInteracted && !ytPlayer) {
+        if (typeof YT !== 'undefined' && YT.Player) loadYouTubeSource();
+      }
     });
   }
 
@@ -142,20 +148,38 @@ const SignagePlayer = (() => {
      SAFARI TAP TO START
   ═══════════════════════════════════════════ */
   function setupTapToStart() {
-    const overlay  = dom.tapOverlay;
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-      || /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const overlay = dom.tapOverlay;
+    if (!overlay) { userInteracted = true; return; }
 
-    if (isSafari && overlay) {
-      overlay.classList.remove('hidden');
-      overlay.addEventListener('click', () => {
-        userInteracted = true;
-        overlay.classList.add('hidden');
-        if (typeof YT !== 'undefined' && YT.Player) window.onYouTubeIframeAPIReady();
-      }, { once: true });
-    } else {
+    // Sempre mostra o tap overlay — necessário para autoplay em todos os browsers
+    overlay.style.display = 'flex';
+
+    const start = async () => {
       userInteracted = true;
-    }
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.5s ease';
+      setTimeout(() => { overlay.style.display = 'none'; }, 500);
+
+      // Se config ainda não carregou, usa default e inicia
+      if (!config) {
+        config = Storage.DEFAULT_CONFIG;
+        applyConfig();
+      }
+
+      if (typeof YT !== 'undefined' && YT.Player) {
+        loadYouTubeSource();
+      } else {
+        const check = setInterval(() => {
+          if (typeof YT !== 'undefined' && YT.Player) {
+            clearInterval(check);
+            loadYouTubeSource();
+          }
+        }, 200);
+      }
+    };
+
+    overlay.addEventListener('click', start, { once: true });
+    overlay.addEventListener('touchend', start, { once: true });
   }
 
   /* ═══════════════════════════════════════════
@@ -163,7 +187,13 @@ const SignagePlayer = (() => {
   ═══════════════════════════════════════════ */
   window.onYouTubeIframeAPIReady = function () {
     if (!userInteracted) return;
-    if (!config) { Storage.onReady(() => window.onYouTubeIframeAPIReady()); return; }
+    if (!config) {
+      Storage.onReady(async () => {
+        config = await Storage.getConfig();
+        loadYouTubeSource();
+      });
+      return;
+    }
     loadYouTubeSource();
   };
 
