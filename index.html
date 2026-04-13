@@ -80,9 +80,10 @@
 <body class="player-body">
 
   <!-- LOADING OVERLAY -->
-  <div id="loadingOverlay" style="position:fixed;inset:0;background:#080808;z-index:998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity 0.5s ease;">
+  <div id="loadingOverlay" style="position:fixed;inset:0;background:#080808;z-index:998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity 0.5s ease;" onclick="document.getElementById('loadingOverlay').classList.add('hidden')">
     <div style="font-family:Syne,sans-serif;font-size:24px;font-weight:800;color:#f0f0f0;">Signage<span style="color:#444">OS</span></div>
-    <div style="font-family:DM Mono,monospace;font-size:11px;color:#444;letter-spacing:0.2em;animation:blink 1.5s ease infinite;">CONECTANDO...</div>
+    <div style="font-family:DM Mono,monospace;font-size:11px;color:#444;letter-spacing:0.2em;animation:blink 1.5s ease infinite;" id="loadingMsg">CONECTANDO...</div>
+    <div style="font-family:DM Mono,monospace;font-size:9px;color:#333;margin-top:8px;">toque para continuar</div>
   </div>
 
   <!-- ══════════════════════════════════════════
