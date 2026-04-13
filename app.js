@@ -1,28 +1,25 @@
 /**
- * SignageOS — Player Core (app.js) — v2 Safari/iPad Fix
- *
- * Correções:
- *  - Safari iPad: tela de toque para desbloquear autoplay
- *  - YouTube não trava após retornar do PiP
- *  - Viewport horizontal corrigido
- *  - Anúncios de demo com URLs mais confiáveis
+ * SignageOS — Player Core v4 (Firebase)
+ * Escuta mudanças em tempo real do Firestore.
  */
 
 const SignagePlayer = (() => {
   let ytPlayer         = null;
   let ytReady          = false;
-  let scheduleTimer    = null;
+  let isPlayingAd      = false;
   let adQueue          = [];
   let adQueueIndex     = 0;
-  let isPlayingAd      = false;
   let adCountdownTimer = null;
   let skipTimeout      = null;
   let adElapsed        = 0;
   let config           = null;
-  let userInteracted   = false; // Safari requer interação
+  let userInteracted   = false;
+
+  let _scheduleInterval = null;
+  let _scheduleTimeout  = null;
+  let nextAdAt          = null;
 
   const $ = id => document.getElementById(id);
-
   const dom = {};
 
   /* ═══════════════════════════════════════════
@@ -43,71 +40,87 @@ const SignagePlayer = (() => {
     dom.statusBar         = $('statusBar');
     dom.clockDisplay      = $('clockDisplay');
     dom.tapOverlay        = $('tapOverlay');
+    dom.loadingOverlay    = $('loadingOverlay');
 
-    config = Storage.getConfig();
-
-    // GARANTE fullscreen ao iniciar — nunca começa em PiP
+    // Garante fullscreen ao iniciar
     exitPip();
     dom.adContainer.classList.add('hidden');
     dom.transitionOverlay.classList.remove('active');
     isPlayingAd = false;
 
-    applyConfig();
     startClock();
-    buildAdQueue();
-    listenForAdminUpdates();
     setupTapToStart();
 
-    console.log('[SignageOS] v2 initialized');
+    // Aguarda Firebase estar pronto
+    Storage.onReady(async () => {
+      config = await Storage.getConfig();
+      applyConfig();
+      buildAdQueue();
+      startRealtimeListeners();
+      hideLoading();
+      console.log('[SignageOS] v4 Firebase ready');
+    });
+  }
+
+  function hideLoading() {
+    if (dom.loadingOverlay) {
+      dom.loadingOverlay.style.opacity = '0';
+      setTimeout(() => dom.loadingOverlay && dom.loadingOverlay.classList.add('hidden'), 500);
+    }
   }
 
   /* ═══════════════════════════════════════════
-     SAFARI — TAP TO START
-     Safari bloqueia autoplay sem interação do usuário.
-     Mostramos uma tela de toque antes de iniciar.
+     REALTIME LISTENERS (Firebase)
   ═══════════════════════════════════════════ */
-  function setupTapToStart() {
-    const overlay = dom.tapOverlay;
-    if (!overlay) return;
+  function startRealtimeListeners() {
+    // Escuta mudanças de config em tempo real
+    Storage.listenConfig(async newConfig => {
+      const oldVideoId    = config?.youtube?.videoId;
+      const oldPlaylistId = config?.youtube?.playlistId;
+      config = newConfig;
+      applyConfig();
 
-    // Detecta se é Safari/iOS
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-      || /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // Se mudou o vídeo/playlist, atualiza o YouTube
+      if (ytReady && (newConfig.youtube.videoId !== oldVideoId ||
+                      newConfig.youtube.playlistId !== oldPlaylistId)) {
+        loadYouTubeSource();
+      }
 
-    if (isSafari) {
-      overlay.classList.remove('hidden');
-      overlay.addEventListener('click', () => {
-        userInteracted = true;
-        overlay.classList.add('hidden');
-        startYouTube();
-      }, { once: true });
-    } else {
-      userInteracted = true;
-      startYouTube();
-    }
-  }
+      // Reinicia agendamento se intervalo mudou
+      if (!isPlayingAd) scheduleNextAd();
+      showToast('Configurações atualizadas');
+    });
 
-  function startYouTube() {
-    // Carrega a API do YouTube dinamicamente após interação
-    if (typeof YT !== 'undefined' && YT.Player) {
-      window.onYouTubeIframeAPIReady();
-    }
-    // caso a API ainda não tenha carregado, o callback onYouTubeIframeAPIReady
-    // será chamado automaticamente quando ela terminar de carregar
+    // Escuta mudanças nos anúncios em tempo real
+    Storage.listenAds(ads => {
+      buildAdQueueFromList(ads);
+      showToast('Anúncios atualizados');
+    });
+
+    // Escuta comandos do Admin (mesma aba ou aba diferente)
+    Storage.onMessage(msg => {
+      switch (msg.type) {
+        case 'FORCE_AD':
+          clearSchedule();
+          triggerAdSequence();
+          break;
+        case 'RESET_TIMER':
+          if (!isPlayingAd) scheduleNextAd();
+          break;
+      }
+    });
   }
 
   /* ═══════════════════════════════════════════
      CONFIG
   ═══════════════════════════════════════════ */
   function applyConfig() {
-    if (!config.ui.showStatusBar) {
+    if (!config) return;
+    if (!config.ui?.showStatusBar) {
       dom.statusBar && dom.statusBar.classList.add('hide');
+    } else {
+      dom.statusBar && dom.statusBar.classList.remove('hide');
     }
-  }
-
-  function reloadConfig() {
-    config = Storage.getConfig();
-    applyConfig();
   }
 
   /* ═══════════════════════════════════════════
@@ -126,42 +139,68 @@ const SignagePlayer = (() => {
   }
 
   /* ═══════════════════════════════════════════
-     YOUTUBE API
+     SAFARI TAP TO START
+  ═══════════════════════════════════════════ */
+  function setupTapToStart() {
+    const overlay  = dom.tapOverlay;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+      || /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+    if (isSafari && overlay) {
+      overlay.classList.remove('hidden');
+      overlay.addEventListener('click', () => {
+        userInteracted = true;
+        overlay.classList.add('hidden');
+        if (typeof YT !== 'undefined' && YT.Player) window.onYouTubeIframeAPIReady();
+      }, { once: true });
+    } else {
+      userInteracted = true;
+    }
+  }
+
+  /* ═══════════════════════════════════════════
+     YOUTUBE
   ═══════════════════════════════════════════ */
   window.onYouTubeIframeAPIReady = function () {
     if (!userInteracted) return;
+    if (!config) { Storage.onReady(() => window.onYouTubeIframeAPIReady()); return; }
+    loadYouTubeSource();
+  };
 
-    const yt = config.youtube;
+  function loadYouTubeSource() {
+    const yt         = config.youtube;
     const videoId    = yt.videoId    || 'q8LE5H0UJz8';
     const playlistId = yt.playlistId || '';
 
-    // Se tiver playlist configurada, usa ela. Senão usa vídeo único em loop.
     const playerVars = {
-      autoplay:       1,
-      mute:           1,
-      controls:       0,
-      disablekb:      1,
-      fs:             0,
-      iv_load_policy: 3,
-      loop:           1,
-      rel:            0,
-      modestbranding: 1,
-      start:          yt.startAt || 0,
-      playsinline:    1,
-      enablejsapi:    1,
-      origin:         window.location.origin,
+      autoplay: 1, mute: 1, controls: 0, disablekb: 1,
+      fs: 0, iv_load_policy: 3, loop: 1, rel: 0,
+      modestbranding: 1, start: yt.startAt || 0,
+      playsinline: 1, enablejsapi: 1,
+      origin: window.location.origin,
     };
 
     if (playlistId) {
-      // Modo playlist
       playerVars.listType = 'playlist';
       playerVars.list     = playlistId;
-      delete playerVars.loop; // playlist gerencia o loop
+      delete playerVars.loop;
     } else {
-      // Modo vídeo único em loop
       playerVars.playlist = videoId;
     }
 
+    if (ytPlayer && ytReady) {
+      // Já existe player, só troca o vídeo
+      try {
+        if (playlistId) {
+          ytPlayer.loadPlaylist({ list: playlistId, listType: 'playlist' });
+        } else {
+          ytPlayer.loadVideoById({ videoId, startSeconds: yt.startAt || 0 });
+        }
+      } catch(e) {}
+      return;
+    }
+
+    // Cria player do zero
     ytPlayer = new YT.Player('ytPlayer', {
       videoId: playlistId ? undefined : videoId,
       playerVars,
@@ -171,79 +210,55 @@ const SignagePlayer = (() => {
         onError:       onYTError,
       },
     });
-  };
+  }
 
   function onYTReady(e) {
     ytReady = true;
     e.target.playVideo();
-    console.log('[SignageOS] YouTube ready');
     scheduleNextAd();
     showToast('Player iniciado ✓');
   }
 
   function onYTStateChange(e) {
-    // Só age quando NÃO está tocando anúncio
     if (isPlayingAd) return;
-
     if (e.data === YT.PlayerState.ENDED) {
-      // Vídeo terminou — reinicia (loop manual)
       setTimeout(() => {
         try { ytPlayer.seekTo(0, true); ytPlayer.playVideo(); } catch(err) {}
       }, 500);
     }
-    // PAUSED ignorado — não forçamos play automaticamente
-    // pois pode ser pausa legítima do sistema
   }
 
   function onYTError(e) {
     console.warn('[SignageOS] YouTube error:', e.data);
   }
 
-  /* ═══════════════════════════════════════════
-     RETOMAR YOUTUBE APÓS ANÚNCIO
-     Método robusto: destrói e recria o player
-     para garantir que não trava no Safari
-  ═══════════════════════════════════════════ */
   function resumeYouTube() {
     if (!ytPlayer) return;
-
-    // Tenta play simples primeiro
     try {
       const state = ytPlayer.getPlayerState();
-      // Se já está tocando (state=1), não faz nada — evita reinício
       if (state === YT.PlayerState.PLAYING) return;
       ytPlayer.playVideo();
     } catch (e) {
-      // Fallback: recria o player sem seekTo para não voltar ao início
-      console.warn('[SignageOS] Recreating YT player after ad');
       ytReady = false;
       const container = $('ytPlayer');
       if (container) container.innerHTML = '';
-
-      setTimeout(() => {
-        window.onYouTubeIframeAPIReady();
-      }, 400);
+      setTimeout(() => window.onYouTubeIframeAPIReady(), 400);
     }
-  }
-
-  /* ═══════════════════════════════════════════
-     TROCA DE VÍDEO
-  ═══════════════════════════════════════════ */
-  function changeYouTubeVideo(videoId) {
-    if (!ytReady || !ytPlayer) return;
-    try {
-      ytPlayer.loadVideoById({ videoId, startSeconds: 0 });
-    } catch(e) {}
   }
 
   /* ═══════════════════════════════════════════
      AD QUEUE
   ═══════════════════════════════════════════ */
-  function buildAdQueue() {
-    const activeAds = Storage.getActiveAds();
+  async function buildAdQueue() {
+    const ads = await Storage.getActiveAds();
+    buildAdQueueFromList(ads);
+  }
+
+  function buildAdQueueFromList(allAds) {
+    const activeAds = allAds.filter(a => a.active);
     if (!activeAds.length) { adQueue = []; return; }
 
-    const rotation = config.schedule.rotation;
+    const rotation = config?.schedule?.rotation || 'sequential';
     if (rotation === 'priority') {
       adQueue = [...activeAds].sort((a, b) => b.priority - a.priority);
     } else if (rotation === 'random') {
@@ -260,7 +275,7 @@ const SignagePlayer = (() => {
     adQueueIndex++;
     if (adQueueIndex >= adQueue.length) {
       adQueueIndex = 0;
-      if (config.schedule.rotation === 'random') adQueue = shuffle(adQueue);
+      if (config?.schedule?.rotation === 'random') adQueue = shuffle(adQueue);
     }
     return ad;
   }
@@ -268,13 +283,9 @@ const SignagePlayer = (() => {
   /* ═══════════════════════════════════════════
      SCHEDULING
   ═══════════════════════════════════════════ */
-  let nextAdAt = null;
-  let _scheduleInterval = null;
-  let _scheduleTimeout  = null;
-
   function scheduleNextAd() {
     clearSchedule();
-    const intervalMs = (config.schedule.intervalMinutes || 2) * 60 * 1000;
+    const intervalMs = (config?.schedule?.intervalMinutes || 2) * 60 * 1000;
     nextAdAt = Date.now() + intervalMs;
 
     _scheduleInterval = setInterval(updateCountdownDisplay, 1000);
@@ -306,16 +317,13 @@ const SignagePlayer = (() => {
      AD SEQUENCE
   ═══════════════════════════════════════════ */
   async function triggerAdSequence() {
-    buildAdQueue();
-    const maxSeq = config.schedule.maxSequential || 1;
-
+    const maxSeq = config?.schedule?.maxSequential || 1;
     for (let i = 0; i < maxSeq; i++) {
       const ad = getNextAd();
       if (!ad) break;
       await playAd(ad);
       if (i < maxSeq - 1) await sleep(500);
     }
-
     scheduleNextAd();
   }
 
@@ -327,33 +335,23 @@ const SignagePlayer = (() => {
       if (isPlayingAd) { resolve(); return; }
       isPlayingAd = true;
 
-      reloadConfig();
-
-      // Não pausamos o YouTube — apenas colocamos em PiP
-      // pauseVideo() causa reinício em alguns streams ao vivo
-
-      // Transição entrada
       dom.transitionOverlay.classList.add('active');
 
       setTimeout(() => {
         enterPip();
 
-        // Configura vídeo
-        dom.adVideo.muted    = false;
-        dom.adVideo.src      = ad.url;
+        dom.adVideo.muted = false;
+        dom.adVideo.src   = ad.url;
         dom.adVideo.load();
 
         if (dom.adTitle) dom.adTitle.textContent = ad.name;
-
         dom.adContainer.classList.remove('hidden');
         dom.adContainer.classList.add('fade-in');
-
         dom.transitionOverlay.classList.remove('active');
 
         dom.statusDot.classList.add('ad');
         dom.statusLabel.textContent = 'ANÚNCIO';
 
-        // Toca anúncio — fallback muted para Safari
         const playPromise = dom.adVideo.play();
         if (playPromise !== undefined) {
           playPromise.catch(() => {
@@ -362,7 +360,6 @@ const SignagePlayer = (() => {
           });
         }
 
-        // Progress + countdown
         const duration = ad.duration || 15;
         adElapsed = 0;
         dom.adProgressBar.style.width = '0%';
@@ -375,16 +372,11 @@ const SignagePlayer = (() => {
           dom.adCountdown.textContent   = Math.max(0, duration - adElapsed) + 's';
         }, 1000);
 
-        // Skip
-        if (config.schedule.showSkipBtn) {
-          skipTimeout = setTimeout(() => {
-            dom.skipBtn.classList.remove('hidden');
-          }, 5000);
+        if (config?.schedule?.showSkipBtn) {
+          skipTimeout = setTimeout(() => dom.skipBtn.classList.remove('hidden'), 5000);
         }
 
-        // Fim do anúncio
         const endTimeout = setTimeout(() => endAd(resolve), duration * 1000);
-
         dom.adVideo.onended = () => { clearTimeout(endTimeout); endAd(resolve); };
         dom.adVideo.onerror = () => { clearTimeout(endTimeout); endAd(resolve); };
 
@@ -394,7 +386,6 @@ const SignagePlayer = (() => {
 
   function endAd(resolve) {
     if (!isPlayingAd) return;
-
     clearInterval(adCountdownTimer);
     clearTimeout(skipTimeout);
 
@@ -411,13 +402,10 @@ const SignagePlayer = (() => {
       dom.skipBtn.classList.add('hidden');
 
       exitPip();
-
       dom.statusDot.classList.remove('ad');
       dom.statusLabel.textContent = 'AO VIVO';
-
       isPlayingAd = false;
 
-      // Retoma YouTube — método robusto
       setTimeout(() => {
         dom.transitionOverlay.classList.remove('active');
         resumeYouTube();
@@ -437,7 +425,7 @@ const SignagePlayer = (() => {
      PIP
   ═══════════════════════════════════════════ */
   function enterPip() {
-    const pos = (config.ui && config.ui.pipPosition) || 'bottom-right';
+    const pos = config?.ui?.pipPosition || 'bottom-right';
     dom.ytWrapper.classList.add('pip');
     ['pip-bottom-left','pip-top-right','pip-top-left'].forEach(c =>
       dom.ytWrapper.classList.remove(c));
@@ -448,33 +436,6 @@ const SignagePlayer = (() => {
     dom.ytWrapper.classList.remove('pip');
     ['pip-bottom-left','pip-top-right','pip-top-left'].forEach(c =>
       dom.ytWrapper.classList.remove(c));
-  }
-
-  /* ═══════════════════════════════════════════
-     SYNC
-  ═══════════════════════════════════════════ */
-  function listenForAdminUpdates() {
-    Storage.onMessage(msg => {
-      switch (msg.type) {
-        case 'CONFIG_UPDATED':
-          reloadConfig();
-          if (!isPlayingAd) scheduleNextAd();
-          break;
-        case 'ADS_UPDATED':
-          buildAdQueue();
-          break;
-        case 'FORCE_AD':
-          clearSchedule();
-          triggerAdSequence();
-          break;
-        case 'RESET_TIMER':
-          if (!isPlayingAd) scheduleNextAd();
-          break;
-        case 'CHANGE_YT':
-          if (msg.payload && msg.payload.videoId) changeYouTubeVideo(msg.payload.videoId);
-          break;
-      }
-    });
   }
 
   /* ═══════════════════════════════════════════
@@ -503,10 +464,10 @@ const SignagePlayer = (() => {
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  return { init, skipAd,
+  return {
+    init, skipAd,
     forceAd: () => { clearSchedule(); triggerAdSequence(); },
     resetTimer: scheduleNextAd,
-    changeYouTubeVideo,
   };
 })();
 
