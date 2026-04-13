@@ -45,11 +45,18 @@ const SignagePlayer = (() => {
     dom.tapOverlay        = $('tapOverlay');
 
     config = Storage.getConfig();
+
+    // GARANTE fullscreen ao iniciar — nunca começa em PiP
+    exitPip();
+    dom.adContainer.classList.add('hidden');
+    dom.transitionOverlay.classList.remove('active');
+    isPlayingAd = false;
+
     applyConfig();
     startClock();
     buildAdQueue();
     listenForAdminUpdates();
-    setupTapToStart(); // Safari fix
+    setupTapToStart();
 
     console.log('[SignageOS] v2 initialized');
   }
@@ -122,30 +129,42 @@ const SignagePlayer = (() => {
      YOUTUBE API
   ═══════════════════════════════════════════ */
   window.onYouTubeIframeAPIReady = function () {
-    // Se Safari ainda não teve interação, aguarda
     if (!userInteracted) return;
 
     const yt = config.youtube;
-    const videoId = yt.videoId || 'q8LE5H0UJz8';
+    const videoId    = yt.videoId    || 'q8LE5H0UJz8';
+    const playlistId = yt.playlistId || '';
+
+    // Se tiver playlist configurada, usa ela. Senão usa vídeo único em loop.
+    const playerVars = {
+      autoplay:       1,
+      mute:           1,
+      controls:       0,
+      disablekb:      1,
+      fs:             0,
+      iv_load_policy: 3,
+      loop:           1,
+      rel:            0,
+      modestbranding: 1,
+      start:          yt.startAt || 0,
+      playsinline:    1,
+      enablejsapi:    1,
+      origin:         window.location.origin,
+    };
+
+    if (playlistId) {
+      // Modo playlist
+      playerVars.listType = 'playlist';
+      playerVars.list     = playlistId;
+      delete playerVars.loop; // playlist gerencia o loop
+    } else {
+      // Modo vídeo único em loop
+      playerVars.playlist = videoId;
+    }
 
     ytPlayer = new YT.Player('ytPlayer', {
-      videoId,
-      playerVars: {
-        autoplay:       1,
-        mute:           1,           // sempre mudo para garantir autoplay
-        controls:       0,
-        disablekb:      1,
-        fs:             0,
-        iv_load_policy: 3,
-        loop:           1,
-        playlist:       videoId,     // obrigatório para loop
-        rel:            0,
-        modestbranding: 1,
-        start:          yt.startAt || 0,
-        playsinline:    1,           // obrigatório no iOS
-        enablejsapi:    1,
-        origin:         window.location.origin,
-      },
+      videoId: playlistId ? undefined : videoId,
+      playerVars,
       events: {
         onReady:       onYTReady,
         onStateChange: onYTStateChange,
@@ -163,17 +182,17 @@ const SignagePlayer = (() => {
   }
 
   function onYTStateChange(e) {
-    // Reinicia se parar (loop manual como fallback)
-    if (e.data === YT.PlayerState.ENDED || e.data === YT.PlayerState.PAUSED) {
-      if (!isPlayingAd) {
-        setTimeout(() => {
-          try {
-            ytPlayer.seekTo(config.youtube.startAt || 0, true);
-            ytPlayer.playVideo();
-          } catch(err) {}
-        }, 500);
-      }
+    // Só age quando NÃO está tocando anúncio
+    if (isPlayingAd) return;
+
+    if (e.data === YT.PlayerState.ENDED) {
+      // Vídeo terminou — reinicia (loop manual)
+      setTimeout(() => {
+        try { ytPlayer.seekTo(0, true); ytPlayer.playVideo(); } catch(err) {}
+      }, 500);
     }
+    // PAUSED ignorado — não forçamos play automaticamente
+    // pois pode ser pausa legítima do sistema
   }
 
   function onYTError(e) {
@@ -188,26 +207,22 @@ const SignagePlayer = (() => {
   function resumeYouTube() {
     if (!ytPlayer) return;
 
+    // Tenta play simples primeiro
     try {
+      const state = ytPlayer.getPlayerState();
+      // Se já está tocando (state=1), não faz nada — evita reinício
+      if (state === YT.PlayerState.PLAYING) return;
       ytPlayer.playVideo();
     } catch (e) {
-      // Se falhar, recria o player
+      // Fallback: recria o player sem seekTo para não voltar ao início
       console.warn('[SignageOS] Recreating YT player after ad');
       ytReady = false;
-      ytPlayer.destroy();
-      ytPlayer = null;
-
-      // Limpa o container e recria
       const container = $('ytPlayer');
-      if (container) {
-        container.innerHTML = '';
-        container.id = 'ytPlayer'; // mantém o ID
-      }
+      if (container) container.innerHTML = '';
 
-      // Pequeno delay antes de recriar
       setTimeout(() => {
         window.onYouTubeIframeAPIReady();
-      }, 300);
+      }, 400);
     }
   }
 
@@ -314,8 +329,8 @@ const SignagePlayer = (() => {
 
       reloadConfig();
 
-      // Pausa YouTube durante o anúncio
-      try { if (ytPlayer) ytPlayer.pauseVideo(); } catch(e) {}
+      // Não pausamos o YouTube — apenas colocamos em PiP
+      // pauseVideo() causa reinício em alguns streams ao vivo
 
       // Transição entrada
       dom.transitionOverlay.classList.add('active');
